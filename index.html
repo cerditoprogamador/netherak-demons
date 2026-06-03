@@ -257,7 +257,7 @@ for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
 // Bloques decorativos sueltos
 block(2.2, 1.0, 2.2, 0x1d1d27, { x: -6, z: 4, y: 0.5, edges: true });
 block(1.4, 2.0, 1.4, 0x1d1d27, { x: 7, z: 2.5, y: 1.0, edges: true });
-block(1.6, 0.7, 1.6, 0x1d1d27, { x: 2.5, z: -7, y: 0.35, edges: true });
+// (la 3ª caja ahora es interactiva: ver buildInteractiveBox, tras los NPCs)
 
 // Rejilla tenue en el piso para percibir el giro de la cámara
 const grid = new THREE.GridHelper(HALF * 2, 20, 0x2a2a3a, 0x16161f);
@@ -345,7 +345,8 @@ function buildNPC(data) {
   parts[1].position.y = 1.2;
   parts[2].position.y = 2.25;
 
-  const npc = { ...data, group, mat, glow: 0, light: null };
+  const npc = { ...data, group, mat, glow: 0, light: null,
+                focusDist: 2.8, camY: 1.7, lookY: 1.3, labelY: 3.05 };
   for (const p of parts) {
     p.userData.npc = npc;
     group.add(p);
@@ -367,11 +368,183 @@ function buildNPC(data) {
 NPC_DATA.forEach(buildNPC);
 
 // ============================================================
+// LA CAJA INTERACTIVA — inscripción "GIONFORTY" en la tapa
+// ============================================================
+function roundRect(ctx, x, y, w, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + w, r);
+  ctx.arcTo(x + w, y + w, x, y + w, r);
+  ctx.arcTo(x, y + w, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function makeTextTexture(text) {
+  const s = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, s, s);
+  // placa grabada sutil
+  ctx.fillStyle = 'rgba(8,7,5,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(s * 0.08 + 28, s * 0.36);
+  ctx.arcTo(s * 0.92, s * 0.36, s * 0.92, s * 0.64, 28);
+  ctx.arcTo(s * 0.92, s * 0.64, s * 0.08, s * 0.64, 28);
+  ctx.arcTo(s * 0.08, s * 0.64, s * 0.08, s * 0.36, 28);
+  ctx.arcTo(s * 0.08, s * 0.36, s * 0.92, s * 0.36, 28);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(255,176,48,0.5)';
+  ctx.stroke();
+  // texto, ajustado al ancho
+  ctx.translate(s / 2, s / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let size = 210;
+  ctx.font = 'bold ' + size + 'px Georgia, serif';
+  while (ctx.measureText(text).width > s * 0.76 && size > 24) {
+    size -= 4; ctx.font = 'bold ' + size + 'px Georgia, serif';
+  }
+  ctx.shadowColor = '#ffb030';
+  ctx.shadowBlur = 36;
+  ctx.fillStyle = '#ffd98a';
+  ctx.fillText(text, 0, 0);
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(120,70,10,0.85)';
+  ctx.strokeText(text, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+function buildInteractiveBox() {
+  const group = new THREE.Group();
+  group.position.set(2.5, 0, -7);
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x20202c, emissive: new THREE.Color(0xffb030),
+    emissiveIntensity: 0, roughness: 1, metalness: 0
+  });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 1.6), mat);
+  box.position.y = 0.35;
+  box.add(new THREE.LineSegments(
+    new THREE.EdgesGeometry(box.geometry),
+    new THREE.LineBasicMaterial({ color: 0x4a4030, transparent: true, opacity: 0.6 })
+  ));
+  group.add(box);
+
+  // Inscripción sobre la tapa (textura siempre visible, se aclara en hover/foco)
+  const textMat = new THREE.MeshBasicMaterial({
+    map: makeTextTexture('GIONFORTY'),
+    transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide
+  });
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), textMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = 0.71;
+  group.add(plane);
+
+  // Orientar para que el texto se lea de frente (desde el centro de la sala)
+  const front = new THREE.Vector3(-group.position.x, 0, -group.position.z).normalize();
+  group.rotation.y = Math.atan2(front.x, front.z);
+
+  const light = new THREE.PointLight(0xffb030, 0, 7, 2);
+  light.position.set(0, 1.2, 0);
+  group.add(light);
+
+  const obj = {
+    name: 'GIONFORTY',
+    role: 'Inscripción en la caja',
+    color: 0xffb030,
+    text: 'Una sola palabra está grabada en la tapa: «GIONFORTY». Nadie en Netherak recuerda haberla puesto ahí.',
+    group, mat, light, textMat, glow: 0, isBox: true,
+    focusDist: 1.7, camY: 2.3, lookY: 0.7, labelY: 1.3
+  };
+  box.userData.npc = obj;
+  npcMeshes.push(box);
+  scene.add(group);
+  npcs.push(obj);
+}
+buildInteractiveBox();
+
+// ============================================================
 // CAPA 2 — CÁMARA EN PRIMERA PERSONA (arrastrar para mirar)
 // ============================================================
 const LOOK_SPEED = 0.0026;
 const PITCH_LIMIT = THREE.MathUtils.degToRad(80); // tope ~90° arriba/abajo
 let yaw = 0, pitch = 0;
+
+// --- Estado de cámara: libre / transición / foco en un tótem ---
+const HOME = new THREE.Vector3(0, EYE, 3);
+const UP = new THREE.Vector3(0, 1, 0);
+let camMode = 'free';        // 'free' | 'transition' | 'focus'
+let transition = null;
+let focusedNPC = null;
+let _lastT = performance.now();
+const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+function lookQuat(fromPos, targetPos) {
+  const m = new THREE.Matrix4().lookAt(fromPos, targetPos, UP);
+  return new THREE.Quaternion().setFromRotationMatrix(m);
+}
+function quatFromYawPitch(y, p) {
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(p, y, 0, 'YXZ'));
+}
+function startTransition(toPos, toQuat, dur, onDone) {
+  transition = {
+    fromPos: camera.position.clone(),
+    toPos: toPos.clone(),
+    fromQuat: camera.quaternion.clone(),
+    toQuat: toQuat.clone(),
+    t: 0, dur, onDone
+  };
+  camMode = 'transition';
+}
+
+// Acercarse a un tótem, encuadrarlo de frente y luego abrir el panel.
+function focusNPC(npc) {
+  closePanel();                    // ocultar panel mientras nos acercamos
+  const P = npc.group.position;
+  // El tótem mira al centro de la sala: su frente apunta hacia el centro.
+  const front = new THREE.Vector3(-P.x, 0, -P.z);
+  if (front.lengthSq() < 0.001) front.set(0, 0, 1);
+  front.normalize();
+  const camPos = new THREE.Vector3(P.x + front.x * npc.focusDist, npc.camY, P.z + front.z * npc.focusDist);
+  const lookAt = new THREE.Vector3(P.x, npc.lookY, P.z);
+  focusedNPC = npc;
+  startTransition(camPos, lookQuat(camPos, lookAt), 0.9, () => {
+    camMode = 'focus';
+    openPanel(npc);
+  });
+}
+
+// Volver a la vista libre, de pie en el centro de la sala.
+function unfocus() {
+  if (camMode === 'free') return;
+  closePanel();
+  startTransition(HOME, quatFromYawPitch(yaw, pitch), 0.8, () => {
+    camMode = 'free';
+    focusedNPC = null;
+  });
+}
+
+// Actualiza la cámara cada frame según el estado.
+function updateCamera(dt) {
+  if (camMode === 'transition' && transition) {
+    transition.t += dt / transition.dur;
+    const k = easeInOutCubic(Math.min(1, transition.t));
+    camera.position.lerpVectors(transition.fromPos, transition.toPos, k);
+    camera.quaternion.slerpQuaternions(transition.fromQuat, transition.toQuat, k);
+    if (transition.t >= 1) { const cb = transition.onDone; transition = null; if (cb) cb(); }
+  } else if (camMode === 'free') {
+    camera.position.copy(HOME);
+    camera.rotation.x = pitch;
+    camera.rotation.y = yaw;
+  }
+  // 'focus': la cámara queda fija en el encuadre del tótem
+}
 
 let isDown = false, dragging = false;
 let lastX = 0, lastY = 0, downX = 0, downY = 0;
@@ -389,7 +562,7 @@ canvas.addEventListener('mousedown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
   updateMouseNDC(e);               // siempre: alimenta la detección de hover
-  if (!isDown) return;
+  if (!isDown || camMode !== 'free') return; // en transición/foco no se gira la vista
   const dx = e.clientX - lastX;
   const dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
@@ -406,7 +579,7 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mouseup', () => {
-  if (isDown && !dragging && hovered) openPanel(hovered); // clic limpio sobre NPC
+  if (isDown && !dragging && hovered && camMode !== 'transition') focusNPC(hovered); // clic limpio: acercarse al tótem
   isDown = false; dragging = false;
   document.body.classList.remove('dragging');
 });
@@ -452,8 +625,8 @@ function openPanel(npc) {
 }
 function closePanel() { panel.classList.remove('show'); }
 
-document.getElementById('close').addEventListener('click', closePanel);
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePanel(); });
+document.getElementById('close').addEventListener('click', unfocus);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') unfocus(); });
 
 // ---------- Etiqueta flotante con el nombre ----------
 const labelEl = document.getElementById('label');
@@ -462,7 +635,7 @@ const tmp = new THREE.Vector3();
 function updateLabel() {
   if (!hovered) { labelEl.classList.remove('show'); return; }
   // Proyectar un punto sobre la cabeza del NPC a coordenadas de pantalla.
-  tmp.set(hovered.group.position.x, 3.05, hovered.group.position.z).project(camera);
+  tmp.set(hovered.group.position.x, hovered.labelY, hovered.group.position.z).project(camera);
   if (tmp.z > 1) { labelEl.classList.remove('show'); return; } // detrás de la cámara
   labelEl.textContent = hovered.name;
   labelEl.style.color = hex(hovered.color);
@@ -477,19 +650,21 @@ function updateLabel() {
 function tick() {
   requestAnimationFrame(tick);
 
-  camera.rotation.x = pitch;
-  camera.rotation.y = yaw;
+  const _now = performance.now();
+  const dt = Math.min(0.05, (_now - _lastT) / 1000); _lastT = _now;
+  updateCamera(dt);
 
   updateHover();
 
   // Transición suave del brillo de cada NPC (no es animación del personaje,
   // solo el realce de hover que pide el plan).
   for (const npc of npcs) {
-    const target = npc === hovered ? 1 : 0;
+    const target = (npc === hovered || npc === focusedNPC) ? 1 : 0;
     npc.glow += (target - npc.glow) * 0.18;
     // Brillo base tenue (silueta apenas visible) + realce fuerte al hacer hover.
     npc.mat.emissiveIntensity = 0.07 + npc.glow * 1.08;
     npc.light.intensity = npc.glow * 2.4; // la luz propia solo al acercarse
+    if (npc.textMat) npc.textMat.opacity = 0.5 + npc.glow * 0.5; // inscripción más nítida
   }
 
   // Parpadeo de antorchas
