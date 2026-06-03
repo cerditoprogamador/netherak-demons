@@ -470,6 +470,96 @@ function buildInteractiveBox() {
 buildInteractiveBox();
 
 // ============================================================
+// EL CARTEL DE PARED — tablón de madera estilo Minecraft
+// ============================================================
+function makeSignTexture(lines) {
+  const W = 1024, H = 604;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  // base de madera con tablones horizontales
+  const planks = 4, ph = H / planks;
+  for (let i = 0; i < planks; i++) {
+    ctx.fillStyle = i % 2 ? '#7a5530' : '#6b4a28';
+    ctx.fillRect(0, i * ph, W, ph);
+    // veta horizontal sutil
+    ctx.strokeStyle = 'rgba(60,38,18,0.35)';
+    ctx.lineWidth = 2;
+    for (let k = 1; k <= 4; k++) {
+      const y = i * ph + (k * ph) / 5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    // junta entre tablones
+    ctx.fillStyle = 'rgba(35,22,10,0.7)';
+    ctx.fillRect(0, i * ph, W, 5);
+  }
+  // marco interior tallado
+  ctx.strokeStyle = '#2c1c0e';
+  ctx.lineWidth = 16;
+  ctx.strokeRect(12, 12, W - 24, H - 24);
+
+  // texto grabado (monospace, look de cartel)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const n = lines.length;
+  for (let i = 0; i < n; i++) {
+    const line = lines[i];
+    let size = 92;
+    ctx.font = 'bold ' + size + 'px "Courier New", monospace';
+    while (ctx.measureText(line).width > W * 0.8 && size > 16) {
+      size -= 3; ctx.font = 'bold ' + size + 'px "Courier New", monospace';
+    }
+    const y = (H * (i + 0.5)) / n;
+    // sombra tallada + relleno oscuro
+    ctx.fillStyle = 'rgba(255,225,170,0.25)';
+    ctx.fillText(line, W / 2, y + 2);
+    ctx.fillStyle = '#241408';
+    ctx.fillText(line, W / 2, y);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+function buildWallSign() {
+  const group = new THREE.Group();
+  group.position.set(0, 2.3, -9.6);   // pared del fondo, mirando al centro (+z)
+
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: 0x33220f, emissive: new THREE.Color(0xc98a3c),
+    emissiveIntensity: 0, roughness: 1, metalness: 0
+  });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.8, 0.14), frameMat);
+  group.add(frame);
+
+  const textMat = new THREE.MeshBasicMaterial({
+    map: makeSignTexture(['~ NETHERAK ~', 'Sala de los', 'Heraldos', 'No mires atras']),
+    transparent: true, opacity: 0.7, side: THREE.DoubleSide
+  });
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.65), textMat);
+  face.position.z = 0.08;
+  group.add(face);
+
+  const light = new THREE.PointLight(0xc98a3c, 0, 6, 2);
+  light.position.set(0, 0, 1.1);
+  group.add(light);
+
+  const obj = {
+    name: 'NETHERAK',
+    role: 'Cartel de madera',
+    color: 0xc98a3c,
+    text: 'Un tablón de madera clavado a la pared. Reza: «NETHERAK — Sala de los Heraldos». Debajo, tallado a cuchillo: "No mires atras".',
+    group, mat: frameMat, light, textMat, glow: 0, isSign: true, textBase: 0.68,
+    focusDist: 2.4, camY: 2.15, lookY: 2.35, labelY: 3.5
+  };
+  frame.userData.npc = obj;
+  npcMeshes.push(frame);
+  scene.add(group);
+  npcs.push(obj);
+}
+buildWallSign();
+
+// ============================================================
 // CAPA 2 — CÁMARA EN PRIMERA PERSONA (arrastrar para mirar)
 // ============================================================
 const LOOK_SPEED = 0.0026;
@@ -664,7 +754,7 @@ function tick() {
     // Brillo base tenue (silueta apenas visible) + realce fuerte al hacer hover.
     npc.mat.emissiveIntensity = 0.07 + npc.glow * 1.08;
     npc.light.intensity = npc.glow * 2.4; // la luz propia solo al acercarse
-    if (npc.textMat) npc.textMat.opacity = 0.5 + npc.glow * 0.5; // inscripción más nítida
+    if (npc.textMat) { const tb = npc.textBase ?? 0.5; npc.textMat.opacity = tb + npc.glow * (1 - tb); } // texto más nítido al acercarse
   }
 
   // Parpadeo de antorchas

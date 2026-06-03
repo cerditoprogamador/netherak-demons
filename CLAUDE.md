@@ -8,6 +8,7 @@ Maqueta web inmersiva (estilo Minecraft) que valida el loop core: **entrar → m
 - **three.js r184 está incrustado dentro del HTML**, no por CDN. Va en dos `<script type="text/plain">` (`core` + `module`, minificados). El script de módulo los convierte en `Blob` URLs y **parchea el import relativo** `./three.core.min.js` → blob del core, para que el ES module resuelva bajo `file://`. Hay respaldo a CDN si se quitaran esos bloques.
 - Capas del código (en orden, comentadas dentro del archivo): **Cuarto → Cámara** (arrastrar para mirar, no pointer-lock) **→ NPCs** (pila base/cuerpo/cabeza) **→ Hover** (raycast desde el cursor) **→ Panel**.
 - NPCs (Malphavor/rojo, Ysthrea/teal, Nerathul/violeta) con `emissive` base tenue que sube + luz propia al hacer hover. **Antorchas** en las paredes (luz cálida con parpadeo) para iluminar la sala.
+- **Objetos interactivos** (mismo sistema por duck-typing: array `npcs` para el brillo + `npcMeshes` para el raycast): los 3 tótems, la **caja GIONFORTY** (inscripción de canvas en la tapa) y el **cartel NETHERAK** de madera estilo Minecraft en la pared del fondo. Al hacer clic, `focusNPC` mueve la cámara con transición (slerp de cuaterniones + easing) hasta encuadrar el objeto, usando sus parámetros `focusDist/camY/lookY/labelY` (la caja baja el ángulo para leer la tapa); Esc o la × llaman a `unfocus` y vuelven a la vista libre. Texto sobre superficies = `CanvasTexture` + `MeshBasicMaterial`.
 
 ## Cómo editar y probar
 
